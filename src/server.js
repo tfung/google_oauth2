@@ -1,6 +1,7 @@
 import express from 'express';
 import session from 'express-session';
 import * as oidc from 'openid-client';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const app = express();
@@ -151,6 +152,7 @@ app.get('/auth/google/callback', async (req, res, next) => {
         name: claims.name,
         email: claims.email,
       };
+      req.session.csrfToken = randomBytes(32).toString('hex');
       logSession('stored authenticated user', req);
 
       req.session.save((saveError) => {
@@ -200,6 +202,10 @@ app.get('/app', (req, res) => {
         <dt>Google subject</dt>
         <dd>${escapeHtml(user.sub)}</dd>
       </dl>
+      <form action="/logout" method="post">
+        <input type="hidden" name="csrfToken" value="${escapeHtml(req.session.csrfToken)}">
+        <button type="submit">Sign out</button>
+      </form>
       <a href="/">Back to home</a>
     </main>
   </body>
@@ -207,9 +213,29 @@ app.get('/app', (req, res) => {
 });
 
 app.post('/logout', (req, res) => {
-  // TODO: Validate a CSRF token, destroy the session, clear its cookie,
-  // and redirect to /. This should not sign the user out of Google.
-  res.status(501).type('text').send('Exercise 3: implement logout.');
+  logSession('logout requested', req);
+  const submittedToken = req.body.csrfToken;
+  const sessionToken = req.session.csrfToken;
+  const tokensMatch =
+    typeof submittedToken === 'string' &&
+    typeof sessionToken === 'string' &&
+    submittedToken.length === sessionToken.length &&
+    timingSafeEqual(
+      Buffer.from(submittedToken),
+      Buffer.from(sessionToken),
+    );
+
+  if (!tokensMatch) {
+    console.warn('Logout rejected: CSRF validation failed');
+    return res.status(403).type('text').send('Invalid logout request.');
+  }
+
+  req.session.destroy((error) => {
+    if (error) return res.status(500).type('text').send('Could not sign out.');
+
+    res.clearCookie('connect.sid');
+    res.redirect('/');
+  });
 });
 
 // Bind only to this computer for the local learning exercise.
