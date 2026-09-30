@@ -31,15 +31,17 @@ app.use(session({
 }));
 
 const logSession = (step, req) => {
+  const session = req.session;
+
   console.log(`[session] ${step}`, {
     id: req.sessionID,
-    keys: Object.keys(req.session),
-    hasPendingLogin: Boolean(req.session.pendingLogin),
-    user: req.session.user
+    keys: session ? Object.keys(session) : [],
+    hasPendingLogin: Boolean(session?.pendingLogin),
+    user: session?.user
       ? {
-          sub: req.session.user.sub,
-          name: req.session.user.name,
-          email: req.session.user.email,
+          sub: session.user.sub,
+          name: session.user.name,
+          email: session.user.email,
         }
       : null,
   });
@@ -214,6 +216,14 @@ app.get('/app', (req, res) => {
 
 app.post('/logout', (req, res) => {
   logSession('logout requested', req);
+
+  if (!req.session?.user) {
+    console.log('[session] logout skipped: no active session');
+    res.clearCookie('connect.sid');
+    logSession('cleared session cookie', req);
+    return res.redirect('/');
+  }
+
   const submittedToken = req.body.csrfToken;
   const sessionToken = req.session.csrfToken;
   const tokensMatch =
@@ -234,6 +244,7 @@ app.post('/logout', (req, res) => {
     if (error) return res.status(500).type('text').send('Could not sign out.');
 
     res.clearCookie('connect.sid');
+    logSession('cleared session cookie', req);
     res.redirect('/');
   });
 });
