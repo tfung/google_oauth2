@@ -51,8 +51,8 @@ sequenceDiagram
     App->>Google: Exchange code with verifier and client authentication
     Google-->>App: ID token and access token
     App->>App: Library validates ID token and nonce
-    App->>App: Regenerate session; save minimal user profile
-    App-->>Browser: Set session cookie; redirect to /app
+    App->>App: Regenerate session and save minimal user profile
+    App-->>Browser: Set session cookie and redirect to /app
     Browser->>App: GET /app with cookie
     App-->>Browser: Profile and optional personal to-dos
 ```
