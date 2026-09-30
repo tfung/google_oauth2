@@ -29,6 +29,21 @@ app.use(session({
   },
 }));
 
+const logSession = (step, req) => {
+  console.log(`[session] ${step}`, {
+    id: req.sessionID,
+    keys: Object.keys(req.session),
+    hasPendingLogin: Boolean(req.session.pendingLogin),
+    user: req.session.user
+      ? {
+          sub: req.session.user.sub,
+          name: req.session.user.name,
+          email: req.session.user.email,
+        }
+      : null,
+  });
+};
+
 const google = await oidc.discovery(
   new URL('https://accounts.google.com'),
   process.env.GOOGLE_CLIENT_ID,
@@ -42,6 +57,8 @@ const redirectUri = new URL(
 
 app.get('/auth/google', async (req, res, next) => {
   try {
+    logSession('start login', req);
+
     // Generate fresh values for this login attempt.
     const state = oidc.randomState();
     const nonce = oidc.randomNonce();
@@ -56,6 +73,7 @@ app.get('/auth/google', async (req, res, next) => {
       nonce,
       codeVerifier,
     };
+    logSession('stored pending login', req);
 
     const authorizationUrl = oidc.buildAuthorizationUrl(google, {
       response_type: 'code',
@@ -71,6 +89,7 @@ app.get('/auth/google', async (req, res, next) => {
     req.session.save((error) => {
       if (error) return next(error);
 
+      logSession('saved pending login', req);
       res.redirect(authorizationUrl.href);
     });
   } catch (error) {
@@ -79,12 +98,14 @@ app.get('/auth/google', async (req, res, next) => {
 });
 
 app.get('/auth/google/callback', async (req, res, next) => {
+  logSession('received callback', req);
   const pendingLogin = req.session.pendingLogin;
   const loginErrorMessage =
     'Sign-in could not be completed. Please try again from the home page.';
 
   const sendLoginError = (reason) => {
     req.session.pendingLogin = undefined;
+    logSession(`cleared pending login: ${reason}`, req);
     console.warn(`Google sign-in failed: ${reason}`);
     res.status(400).type('text').send(loginErrorMessage);
   };
@@ -102,6 +123,7 @@ app.get('/auth/google/callback', async (req, res, next) => {
   }
 
   try {
+    logSession('before authorization code exchange', req);
     const tokens = await oidc.authorizationCodeGrant(
       google,
       new URL(req.originalUrl, process.env.BASE_URL),
@@ -111,6 +133,7 @@ app.get('/auth/google/callback', async (req, res, next) => {
         expectedNonce: pendingLogin.nonce,
       },
     );
+    logSession('after authorization code exchange', req);
     const claims = tokens.claims();
     console.log('Google ID token claims:', claims);
 
@@ -118,18 +141,22 @@ app.get('/auth/google/callback', async (req, res, next) => {
       return sendLoginError('identity claims did not include a subject');
     }
 
+    logSession('before session regeneration', req);
     req.session.regenerate((regenerateError) => {
       if (regenerateError) return next(regenerateError);
 
+      logSession('session regenerated', req);
       req.session.user = {
         sub: claims.sub,
         name: claims.name,
         email: claims.email,
       };
+      logSession('stored authenticated user', req);
 
       req.session.save((saveError) => {
         if (saveError) return next(saveError);
 
+        logSession('saved authenticated session', req);
         res.redirect('/app');
       });
     });
@@ -139,10 +166,44 @@ app.get('/auth/google/callback', async (req, res, next) => {
   }
 });
 
+const escapeHtml = (value) => String(value ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#39;');
+
 app.get('/app', (req, res) => {
-  // TODO: Read the authenticated user from your server-side session.
-  // Until authentication exists, nobody can access this page.
-  res.status(401).type('text').send('Sign-in is not implemented yet. Start at /.');
+  logSession('requested app page', req);
+  const user = req.session.user;
+
+  if (!user) {
+    return res.redirect('/');
+  }
+
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Your profile</title>
+  </head>
+  <body>
+    <main>
+      <h1>Welcome, ${escapeHtml(user.name || 'Google user')}</h1>
+      <dl>
+        <dt>Name</dt>
+        <dd>${escapeHtml(user.name)}</dd>
+        <dt>Email</dt>
+        <dd>${escapeHtml(user.email)}</dd>
+        <dt>Google subject</dt>
+        <dd>${escapeHtml(user.sub)}</dd>
+      </dl>
+      <a href="/">Back to home</a>
+    </main>
+  </body>
+</html>`);
 });
 
 app.post('/logout', (req, res) => {
