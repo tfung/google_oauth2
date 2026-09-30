@@ -1,5 +1,7 @@
 # Google SSO learning project — 1–2 hours
 
+For scaffold setup and exercises, see [GETTING_STARTED.md](GETTING_STARTED.md).
+
 ## Goal
 
 Build a local web app where you sign in with Google, see your profile, and sign out. If time permits, add a private to-do list to practice protecting user data.
@@ -69,7 +71,7 @@ sequenceDiagram
 | `POST /todos` (optional) | Require session and CSRF token; add a trimmed title of 1–200 characters |
 | `POST /todos/:id/toggle` (optional) | Require session and CSRF token; toggle only a to-do owned by current user |
 
-Keep files small: `src/server.js` for app/session setup, `src/auth.js` for OIDC routes and auth guard, `src/todos.js` for optional data/routes, `views/` for escaped templates, `.env.example` for configuration, and `README.md` for setup and flow notes. Ignore `.env` in Git.
+Keep files small: `src/server.js` for app/session setup, `src/auth.js` for OIDC routes and auth guard, `src/todos.js` for optional data/routes, `views/` for escaped templates, `.env.example` for configuration, and `GETTING_STARTED.md` for setup and flow notes. Ignore `.env` in Git.
 
 ## Essential behavior
 

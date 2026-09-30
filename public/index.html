@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Google sign-in practice</title>
+    <style>
+      body { max-width: 36rem; margin: 4rem auto; padding: 0 1rem; font: 18px/1.6 system-ui, sans-serif; }
+      button { padding: 0.5rem 1rem; font: inherit; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Google sign-in practice</h1>
+    <p>A tiny app for learning OAuth 2.0 and OpenID Connect.</p>
+    <p>Sign-in is your first exercise. The button currently opens a placeholder route.</p>
+    <form action="/auth/google" method="get">
+      <button type="submit">Sign in with Google</button>
+    </form>
+    <h2>Your profile</h2>
+    <p>Once you implement authentication, show your name and email on the protected page.</p>
+    <a href="/app">Visit protected page</a>
+  </body>
+</html>
