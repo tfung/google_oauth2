@@ -1,6 +1,6 @@
 import express from 'express';
 import session from 'express-session';
-import * as oidc from 'openid-client'
+import * as oidc from 'openid-client';
 import { fileURLToPath } from 'node:url';
 
 const app = express();
@@ -78,10 +78,65 @@ app.get('/auth/google', async (req, res, next) => {
   }
 });
 
-app.get('/auth/google/callback', (req, res) => {
-  // TODO: Validate state, exchange the code, and verify the ID token
-  // with an OIDC library. Regenerate the session before saving the user.
-  res.status(501).type('text').send('Exercise 2: implement the Google callback.');
+app.get('/auth/google/callback', async (req, res, next) => {
+  const pendingLogin = req.session.pendingLogin;
+  const loginErrorMessage =
+    'Sign-in could not be completed. Please try again from the home page.';
+
+  const sendLoginError = (reason) => {
+    req.session.pendingLogin = undefined;
+    console.warn(`Google sign-in failed: ${reason}`);
+    res.status(400).type('text').send(loginErrorMessage);
+  };
+
+  if (req.query.error) {
+    return sendLoginError('provider rejected the request');
+  }
+
+  if (
+    !pendingLogin ||
+    typeof req.query.state !== 'string' ||
+    req.query.state !== pendingLogin.state
+  ) {
+    return sendLoginError('state validation failed');
+  }
+
+  try {
+    const tokens = await oidc.authorizationCodeGrant(
+      google,
+      new URL(req.originalUrl, process.env.BASE_URL),
+      {
+        pkceCodeVerifier: pendingLogin.codeVerifier,
+        expectedState: pendingLogin.state,
+        expectedNonce: pendingLogin.nonce,
+      },
+    );
+    const claims = tokens.claims();
+    console.log('Google ID token claims:', claims);
+
+    if (!claims?.sub) {
+      return sendLoginError('identity claims did not include a subject');
+    }
+
+    req.session.regenerate((regenerateError) => {
+      if (regenerateError) return next(regenerateError);
+
+      req.session.user = {
+        sub: claims.sub,
+        name: claims.name,
+        email: claims.email,
+      };
+
+      req.session.save((saveError) => {
+        if (saveError) return next(saveError);
+
+        res.redirect('/app');
+      });
+    });
+  } catch (error) {
+    console.warn(`Google sign-in failed: ${error.name || 'token exchange error'}`);
+    sendLoginError('authorization response validation failed');
+  }
 });
 
 app.get('/app', (req, res) => {
